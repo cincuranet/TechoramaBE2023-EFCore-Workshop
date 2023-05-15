@@ -33,6 +33,7 @@ class MyContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.ApplyConfiguration(new OwnerConfiguration());
+
     }
 
     public DbSet<Owner> Owners => Set<Owner>();
