@@ -1,6 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions;
+using Microsoft.EntityFrameworkCore.Query.Internal;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Options;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -82,23 +84,33 @@ class Program
         static void Test()
         {
             using var db = new MyContext();
-            foreach (var item in db.Owners)
+            foreach (var item in db.Owners.ToList())
             {
                 db.Entry(item).Collection(x => x.Dogs).Query().Take(2).Load();
-                db.Dogs.Where(x => x.Owner == item).Take(2).Load();
+                //db.Dogs.Where(x => x.Owner == item).Take(2).Load();
             }
-            var dogs = db.Dogs
-                .Where(x => x.Id >= 1)
-                .Include(x => x.Owner)
-                .AsSingleQuery()
-                .AsNoTrackingWithIdentityResolution()
-                .ToList();
-            foreach (var item in dogs)
-            {
-                db.Entry(item).Reference(x => x.Owner).Load();
-                Console.WriteLine($"{item.Name} - {item.Owner.LastName}");
-            }
+            //var dogs = db.Dogs
+            //    .Where(x => x.Id >= 1)
+            //    .Include(x => x.Owner)
+            //    .AsSingleQuery()
+            //    .AsNoTrackingWithIdentityResolution()
+            //    .ToList();
+            //foreach (var item in dogs)
+            //{
+            //    db.Entry(item).Reference(x => x.Owner).Load();
+            //    Console.WriteLine($"{item.Name} - {item.Owner.LastName}");
+            //}
         }
+    }
+}
+
+static class Queries
+{
+    static Func<MyContext, List<Dog>> GetDogsQuery = EF.CompileQuery<MyContext, List<Dog>>(db => db.Dogs.ToList());
+
+    public static List<Dog> GetDogs(MyContext context)
+    {
+        return GetDogsQuery(context);
     }
 }
 
@@ -123,11 +135,38 @@ class MyContext : DbContext
         }
     }
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        base.ConfigureConventions(configurationBuilder);
+
+        configurationBuilder.Conventions.Add(_ => new FooConvention());
+        //configurationBuilder.Conventions.Replace
+    }
+
+    class FooConvention : IModelFinalizingConvention
+    {
+        public void ProcessModelFinalizing(IConventionModelBuilder modelBuilder, IConventionContext<IConventionModelBuilder> context)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
         #region Foo
+
+        foreach(var entity in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var prop in entity.GetProperties())
+            {
+                if (prop.ClrType != typeof(string))
+                    continue;
+                prop.SetMaxLength(1000);
+            }
+        }
+
         modelBuilder.ApplyConfiguration(new OwnerConfiguration());
         modelBuilder.ApplyConfiguration(new DogConfiguration());
         modelBuilder.HasSequence("cdssdcds").IsCyclic()
@@ -208,7 +247,7 @@ class OwnerConfiguration : IEntityTypeConfiguration<Owner>
         builder.OwnsOne(x => x.InvoicingAddress);
     }
 }
-public class Owner
+public record class Owner
 {
     public int Id { get; set; }
     public string FirstName { get; set; }
