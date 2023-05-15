@@ -23,6 +23,7 @@ class Program
             //.IgnoreQueryFilters()
             .Where(x => x.DateOfBirth.Year == 2000)
             .ToList();
+        db.Owners.Where(x => x.Dogs.Any(y => y.DateOfBirth.Year == 2000)).Load();
     }
 }
 
