@@ -51,6 +51,10 @@ class OwnerConfiguration : IEntityTypeConfiguration<Owner>
             .IsUnicode()
             .HasMaxLength(50)
             .HasColumnName("Surname");
+        builder.HasMany(x => x.Dogs)
+            .WithOne(x => x.Owner)
+            .HasForeignKey(x => x.OwnerId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
 
