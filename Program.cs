@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Options;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
 
@@ -19,16 +21,46 @@ class Program
         //db.Dogs.Where(x => EF.Property<DateTimeOffset>(x, "LastUpdated") == DateTimeOffset.Now).Load();
         //db.Set<Dictionary<string, object>>("Foo").Add(new Dictionary<string, object>());
         //db.SaveChanges();
-        db.Dogs
-            //.IgnoreQueryFilters()
-            .Where(x => x.DateOfBirth.Year == 2000)
-            .ToList();
-        db.Owners.Where(x => x.Dogs.Any(y => y.DateOfBirth.Year == 2000)).Load();
+        //db.Dogs
+        //    //.IgnoreQueryFilters()
+        //    .Where(x => x.DateOfBirth.Year == 2000)
+        //    .ToList();
+        //db.Owners.Where(x => x.Dogs.Any(y => y.DateOfBirth.Year == 2000)).Load();
+        //var owner = new Owner() { LastName = "Test" };
+        //db.Add(owner);
+        //var dog = new Dog()
+        //{
+        //    DateOfBirth = DateTimeOffset.Now,
+        //    Name = "Test",
+        //    Owner = owner,
+        //    Duration = new Duration(10),
+        //};
+        //db.Dogs.Add(dog);
+        //db.SaveChanges();
+        //dog.Duration = new Duration(10);
+        //db.SaveChanges();
+        //db.Set<Foo>().Load();
+        //db.Database.ExecuteSqlRaw("create function ...");
+        //db.Set<Foo>()
+        //    .FromSqlRaw("select 1 as Bar, '2' as Baz")
+        //    .OrderBy(x => MyContext.Foo(x.Bar))
+        //    .Load();
+        var foo = db.Set<Order>()
+            .TagWithCallSite()
+            .Where(x => x.Id == 10)
+            .First();
+        db.Entry(foo).Reference(x => x.DetailedOrder).Load();
     }
 }
 
 class MyContext : DbContext
 {
+    [DbFunction()]
+    public static int Foo(int i)
+    {
+        throw new InvalidOperationException();
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
@@ -62,6 +94,25 @@ class MyContext : DbContext
         //    b.Property<int>("Id");
         //    b.Property<string>("Foo");
         //});
+
+        modelBuilder.Entity<DetailedOrder>(dob =>
+        {
+            dob.ToTable("Orders");
+            dob.Property(o => o.Status).HasColumnName("Status");
+        });
+
+        modelBuilder.Entity<Order>(ob =>
+        {
+            ob.ToTable("Orders");
+            ob.Property(o => o.Status).HasColumnName("Status");
+            ob.HasOne(o => o.DetailedOrder).WithOne()
+                .HasForeignKey<DetailedOrder>(o => o.Id);
+            ob.Navigation(o => o.DetailedOrder).IsRequired();
+        });
+
+        modelBuilder.Entity<Foo>()
+            .HasNoKey()
+            /*.ToView("MyView")*/;
     }
 
     public DbSet<Owner> Owners => Set<Owner>();
@@ -78,7 +129,8 @@ class OwnerConfiguration : IEntityTypeConfiguration<Owner>
             .IsFixedLength(false)
             .IsUnicode()
             .HasMaxLength(50)
-            .HasColumnName("Surname");
+            .HasColumnName("Surname")
+            /*.HasDefaultValueSql()*/;
         builder.HasMany(x => x.Dogs)
             .WithOne(x => x.Owner)
             .HasForeignKey(x => x.OwnerId)
@@ -117,6 +169,8 @@ class DogConfiguration : IEntityTypeConfiguration<Dog>
             .HasField("dob");
         builder.Property<DateTimeOffset>("LastUpdated");
         builder.HasQueryFilter(x => x.Active);
+        builder.Property(x => x.Duration)
+            .HasConversion(new DurationConverter()/*, comparer*/);
     }
 }
 class Dog
@@ -139,4 +193,49 @@ class Dog
     public Owner Owner { get; set; }
     public int OwnerId { get; set; }
     public bool Active { get; set; }
+    public Duration Duration { get; set; }
+}
+
+class Duration
+{
+    private int _value;
+
+    public Duration(int ms)
+    {
+        _value = ms;
+    }
+
+    public int Value => _value;
+}
+class DurationConverter : ValueConverter<Duration, int>
+{
+    public DurationConverter()
+        : base(d => d.Value, x => new Duration(x), null)
+    { }
+}
+
+public class Order
+{
+    public int Id { get; set; }
+    public OrderStatus? Status { get; set; }
+    public DetailedOrder DetailedOrder { get; set; }
+}
+public class DetailedOrder
+{
+    public int Id { get; set; }
+    public OrderStatus? Status { get; set; }
+    public string BillingAddress { get; set; }
+    public string ShippingAddress { get; set; }
+    public byte[] Version { get; set; }
+}
+public enum OrderStatus
+{
+    Pending,
+    Shipped
+}
+
+class Foo
+{
+    public int Bar { get; set; }
+    public string Baz { get; set; }
 }
