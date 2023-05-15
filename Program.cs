@@ -1,6 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.Extensions.Options;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Net;
+using System.Net.Sockets;
 
 namespace Test;
 
@@ -11,6 +14,11 @@ class Program
         using var db = new MyContext();
         db.Database.EnsureDeleted();
         db.Database.EnsureCreated();
+        //db.Owners.Add(new Owner() { LastName = "Test" });
+        //db.SaveChanges();
+        //db.Dogs.Where(x => EF.Property<DateTimeOffset>(x, "LastUpdated") == DateTimeOffset.Now).Load();
+        //db.Set<Dictionary<string, object>>("Foo").Add(new Dictionary<string, object>());
+        //db.SaveChanges();
     }
 }
 
@@ -33,7 +41,22 @@ class MyContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.ApplyConfiguration(new OwnerConfiguration());
+        modelBuilder.ApplyConfiguration(new DogConfiguration());
+        modelBuilder.HasSequence("cdssdcds").IsCyclic()
+            .IncrementsBy(7839);
 
+        //modelBuilder.SharedTypeEntity<Dictionary<string, object>>("Foo", b =>
+        //{
+        //    b.Property<int>("Id");
+        //    b.Property<string>("Name");
+        //    b.Property<int>("Age");
+        //    b.Property<double>("Car");
+        //});
+        //modelBuilder.SharedTypeEntity<Dictionary<string, object>>("Bar", b =>
+        //{
+        //    b.Property<int>("Id");
+        //    b.Property<string>("Foo");
+        //});
     }
 
     public DbSet<Owner> Owners => Set<Owner>();
@@ -55,21 +78,58 @@ class OwnerConfiguration : IEntityTypeConfiguration<Owner>
             .WithOne(x => x.Owner)
             .HasForeignKey(x => x.OwnerId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.Property(x => x.Id)/*.UseHiLo()*/;
+        builder.OwnsOne(x => x.ShippingAddress);
+        builder.OwnsOne(x => x.InvoicingAddress);
     }
 }
-
 class Owner
 {
     public int Id { get; set; }
     public string FirstName { get; set; }
     public string LastName { get; set; }
     public ICollection<Dog> Dogs { get; set; }
+    public Address ShippingAddress { get; set; }
+    public Address InvoicingAddress { get; set; }
+}
+//class Name
+//{
+//    public string FirstName { get; set; }
+//    public string LastName { get; set; }
+//}
+class Address
+{
+    public string Street { get; set; } 
+    public string City { get; set; } 
+}
+
+class DogConfiguration : IEntityTypeConfiguration<Dog>
+{
+    public void Configure(EntityTypeBuilder<Dog> builder)
+    {
+        builder.Property(x => x.DateOfBirth)
+            .UsePropertyAccessMode(PropertyAccessMode.FieldDuringConstruction)
+            .HasField("dob");
+        builder.Property<DateTimeOffset>("LastUpdated");
+    }
 }
 class Dog
 {
+    private DateTimeOffset dob;
+
     public int Id { get; set; }
     public string Name { get; set; }
-    public DateTimeOffset DateOfBirth { get; set; }
+    public DateTimeOffset DateOfBirth
+    {
+        get => dob;
+        set
+        {
+            Validate(value);
+            dob = value;
+
+            static void Validate(DateTimeOffset dto) { }
+        }
+    }
     public Owner Owner { get; set; }
     public int OwnerId { get; set; }
 }
