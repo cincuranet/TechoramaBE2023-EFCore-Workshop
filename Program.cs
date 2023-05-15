@@ -19,6 +19,10 @@ class Program
         //db.Dogs.Where(x => EF.Property<DateTimeOffset>(x, "LastUpdated") == DateTimeOffset.Now).Load();
         //db.Set<Dictionary<string, object>>("Foo").Add(new Dictionary<string, object>());
         //db.SaveChanges();
+        db.Dogs
+            //.IgnoreQueryFilters()
+            .Where(x => x.DateOfBirth.Year == 2000)
+            .ToList();
     }
 }
 
@@ -99,8 +103,8 @@ class Owner
 //}
 class Address
 {
-    public string Street { get; set; } 
-    public string City { get; set; } 
+    public string Street { get; set; }
+    public string City { get; set; }
 }
 
 class DogConfiguration : IEntityTypeConfiguration<Dog>
@@ -111,6 +115,7 @@ class DogConfiguration : IEntityTypeConfiguration<Dog>
             .UsePropertyAccessMode(PropertyAccessMode.FieldDuringConstruction)
             .HasField("dob");
         builder.Property<DateTimeOffset>("LastUpdated");
+        builder.HasQueryFilter(x => x.Active);
     }
 }
 class Dog
@@ -132,4 +137,5 @@ class Dog
     }
     public Owner Owner { get; set; }
     public int OwnerId { get; set; }
+    public bool Active { get; set; }
 }
