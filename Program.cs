@@ -1,4 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Test;
 
@@ -29,10 +31,26 @@ class MyContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.ApplyConfiguration(new OwnerConfiguration());
     }
 
     public DbSet<Owner> Owners => Set<Owner>();
     public DbSet<Dog> Dogs => Set<Dog>();
+}
+
+class OwnerConfiguration : IEntityTypeConfiguration<Owner>
+{
+    public void Configure(EntityTypeBuilder<Owner> builder)
+    {
+        builder.ToTable("People");
+        builder.Property(x => x.LastName)
+            .IsRequired()
+            .IsFixedLength(false)
+            .IsUnicode()
+            .HasMaxLength(50)
+            .HasColumnName("Surname");
+    }
 }
 
 class Owner
