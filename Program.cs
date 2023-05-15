@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Options;
@@ -47,11 +48,57 @@ class Program
         //    .FromSqlRaw("select 1 as Bar, '2' as Baz")
         //    .OrderBy(x => MyContext.Foo(x.Bar))
         //    .Load();
-        var foo = db.Set<Order>()
-            .TagWithCallSite()
-            .Where(x => x.Id == 10)
-            .First();
-        db.Entry(foo).Reference(x => x.DetailedOrder).Load();
+        //var foo = db.Set<Order>()
+        //    .TagWithCallSite()
+        //    .Where(x => x.Id == 10)
+        //    .First();
+        //db.Entry(foo).Reference(x => x.DetailedOrder).Load();
+        //db.Set<Boat>().Add(new Boat() { Length = 10, Price = 7 });
+        //db.SaveChanges();
+        ////db.Set<Vehicle>().ToList();
+        ////db.Set<Plane>()/*.OfType<Plane>()*/.ToList();
+        //db.Set<Boat>().ToList();
+        db.Owners.Add(new Owner()
+        {
+            LastName = "Test",
+            Dogs = new List<Dog>()
+            {
+                new Dog() { Active = true, DateOfBirth = DateTimeOffset.Now, Name = "Teest" },
+                new Dog() { Active = true, DateOfBirth = DateTimeOffset.Now, Name = "Teest" },
+            }
+        });
+        db.Owners.Add(new Owner()
+        {
+            LastName = "Test2",
+            Dogs = new List<Dog>()
+            {
+                new Dog() { Active = true, DateOfBirth = DateTimeOffset.Now, Name = "cdsvds" },
+                new Dog() { Active = true, DateOfBirth = DateTimeOffset.Now, Name = "aaaaaa" },
+            }
+        });
+        db.SaveChanges();
+        Test();
+
+        static void Test()
+        {
+            using var db = new MyContext();
+            foreach (var item in db.Owners)
+            {
+                db.Entry(item).Collection(x => x.Dogs).Query().Take(2).Load();
+                db.Dogs.Where(x => x.Owner == item).Take(2).Load();
+            }
+            var dogs = db.Dogs
+                .Where(x => x.Id >= 1)
+                .Include(x => x.Owner)
+                .AsSingleQuery()
+                .AsNoTrackingWithIdentityResolution()
+                .ToList();
+            foreach (var item in dogs)
+            {
+                db.Entry(item).Reference(x => x.Owner).Load();
+                Console.WriteLine($"{item.Name} - {item.Owner.LastName}");
+            }
+        }
     }
 }
 
@@ -72,6 +119,7 @@ class MyContext : DbContext
             optionsBuilder.UseSqlServer(@"Server=.;Database=workshop;User Id=sa;Password=test;ConnectRetryCount=0;TrustServerCertificate=true");
             optionsBuilder.LogTo(Console.WriteLine);
             optionsBuilder.EnableSensitiveDataLogging();
+            //optionsBuilder.UseLazyLoadingProxies();
         }
     }
 
@@ -79,6 +127,7 @@ class MyContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        #region Foo
         modelBuilder.ApplyConfiguration(new OwnerConfiguration());
         modelBuilder.ApplyConfiguration(new DogConfiguration());
         modelBuilder.HasSequence("cdssdcds").IsCyclic()
@@ -97,29 +146,46 @@ class MyContext : DbContext
         //    b.Property<string>("Foo");
         //});
 
-        modelBuilder.Entity<DetailedOrder>(dob =>
-        {
-            dob.ToTable("Orders");
-            dob.Property(o => o.Status).HasColumnName("Status");
-        });
+        //modelBuilder.Entity<DetailedOrder>(dob =>
+        //{
+        //    dob.ToTable("Orders");
+        //    dob.Property(o => o.Status).HasColumnName("Status");
+        //});
 
-        modelBuilder.Entity<Order>(ob =>
-        {
-            ob.ToTable("Orders");
-            ob.Property(o => o.Status).HasColumnName("Status");
-            ob.HasOne(o => o.DetailedOrder).WithOne()
-                .HasForeignKey<DetailedOrder>(o => o.Id);
-            ob.Navigation(o => o.DetailedOrder).IsRequired();
-        });
+        //modelBuilder.Entity<Order>(ob =>
+        //{
+        //    ob.ToTable("Orders");
+        //    ob.Property(o => o.Status).HasColumnName("Status");
+        //    ob.HasOne(o => o.DetailedOrder).WithOne()
+        //        .HasForeignKey<DetailedOrder>(o => o.Id);
+        //    ob.Navigation(o => o.DetailedOrder).IsRequired();
+        //});
 
         modelBuilder.Entity<Foo>()
             .HasNoKey()
             /*.ToView("MyView")*/;
+        #endregion
+
+        modelBuilder.Entity<Vehicle>(b =>
+        {
+            b.UseTpcMappingStrategy();
+            b.HasQueryFilter(b => b.Active);
+        });
+        modelBuilder.Entity<Boat>(b =>
+        {
+            //b.HasDiscriminator<string>("D").HasValue("BO");
+        });
+        modelBuilder.Entity<Plane>(b =>
+        {
+            //b.HasDiscriminator<string>("D").HasValue("PL");
+        });
     }
 
     public DbSet<Owner> Owners => Set<Owner>();
     public DbSet<Dog> Dogs => Set<Dog>();
 }
+
+#region Foo
 
 class OwnerConfiguration : IEntityTypeConfiguration<Owner>
 {
@@ -142,12 +208,12 @@ class OwnerConfiguration : IEntityTypeConfiguration<Owner>
         builder.OwnsOne(x => x.InvoicingAddress);
     }
 }
-class Owner
+public class Owner
 {
     public int Id { get; set; }
     public string FirstName { get; set; }
     public string LastName { get; set; }
-    public ICollection<Dog> Dogs { get; set; }
+    public virtual ICollection<Dog> Dogs { get; set; }
     public Address ShippingAddress { get; set; }
     public Address InvoicingAddress { get; set; }
 }
@@ -156,7 +222,7 @@ class Owner
 //    public string FirstName { get; set; }
 //    public string LastName { get; set; }
 //}
-class Address
+public class Address
 {
     public string Street { get; set; }
     public string City { get; set; }
@@ -175,7 +241,7 @@ class DogConfiguration : IEntityTypeConfiguration<Dog>
             .HasConversion(new DurationConverter()/*, comparer*/);
     }
 }
-class Dog
+public class Dog
 {
     private DateTimeOffset dob;
 
@@ -192,13 +258,17 @@ class Dog
             static void Validate(DateTimeOffset dto) { }
         }
     }
-    public Owner Owner { get; set; }
+    public virtual Owner Owner { get; set; }
     public int OwnerId { get; set; }
     public bool Active { get; set; }
     public Duration Duration { get; set; }
+
+    //public Dog(IEntityType metadata)
+    //{
+    //}
 }
 
-class Duration
+public class Duration
 {
     private int _value;
 
@@ -216,20 +286,20 @@ class DurationConverter : ValueConverter<Duration, int>
     { }
 }
 
-public class Order
-{
-    public int Id { get; set; }
-    public OrderStatus? Status { get; set; }
-    public DetailedOrder DetailedOrder { get; set; }
-}
-public class DetailedOrder
-{
-    public int Id { get; set; }
-    public OrderStatus? Status { get; set; }
-    public string BillingAddress { get; set; }
-    public string ShippingAddress { get; set; }
-    public byte[] Version { get; set; }
-}
+//public class Order
+//{
+//    public int Id { get; set; }
+//    public OrderStatus? Status { get; set; }
+//    public DetailedOrder DetailedOrder { get; set; }
+//}
+//public class DetailedOrder
+//{
+//    public int Id { get; set; }
+//    public OrderStatus? Status { get; set; }
+//    public string BillingAddress { get; set; }
+//    public string ShippingAddress { get; set; }
+//    public byte[] Version { get; set; }
+//}
 public enum OrderStatus
 {
     Pending,
@@ -240,4 +310,21 @@ class Foo
 {
     public int Bar { get; set; }
     public string Baz { get; set; }
+}
+
+#endregion
+
+abstract class Vehicle
+{
+    public int Id { get; set; }
+    public decimal Price { get; set; }
+    public bool Active { get; set; }
+}
+class Boat : Vehicle
+{
+    public float Length { get; set; }
+}
+class Plane : Vehicle
+{
+    public int MTOW { get; set; }
 }
